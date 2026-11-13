@@ -53,10 +53,11 @@
       if (f.kind === 'text' || (opt.skip && opt.skip(f))) { fKind[i] = 3; continue; }
       const cv = (opt.colorOf && opt.colorOf(f)) || '#ffeb3b';
       const col = typeof cv === 'string' ? cv : cv.c, fill = typeof cv === 'string' ? '' : (cv.fill || '');
+      const mark = typeof cv === 'object' && cv && cv.mark ? 1 : 0;
       const dash = f.props && f.props.style ? 1 : 0;
-      const sk = col + '|' + dash + '|' + fill;
+      const sk = col + '|' + dash + '|' + fill + '|' + mark;
       let si = styleIdx[sk];
-      if (si === undefined) { si = styles.length; styleIdx[sk] = si; styles.push({ color: col, dash, fill }); }
+      if (si === undefined) { si = styles.length; styleIdx[sk] = si; styles.push({ color: col, dash, fill, mark }); }
       fStyle[i] = si;
       fLid[i] = opt.lidOf ? opt.lidOf(f) : 0;
       const start0 = w;
@@ -215,15 +216,16 @@
           if (Math.abs(x - lx) >= 0.6 || Math.abs(y - ly) >= 0.6 || j === n - 1) { ctx.lineTo(x, y); lx = x; ly = y; }
         }
       };
-      // vẽ nền màu loại đất trước, nét ranh (Level 10…) sau để nét không bị màu nền che mờ
+      // vẽ nền màu loại đất trước, thửa đánh dấu màu theo dõi, rồi nét ranh (Level 10…) sau
       const order = [];
-      for (let si = 0; si < ns; si++) if (d.styles[si].fill) order.push(si);
-      for (let si = 0; si < ns; si++) if (!d.styles[si].fill) order.push(si);
+      for (let si = 0; si < ns; si++) if (d.styles[si].fill && !d.styles[si].mark) order.push(si);
+      for (let si = 0; si < ns; si++) if (d.styles[si].mark) order.push(si);
+      for (let si = 0; si < ns; si++) if (!d.styles[si].fill && !d.styles[si].mark) order.push(si);
       for (const si of order) {
         const g = groups[si]; if (!g) continue;
         const st = d.styles[si];
         if (st.color === 'transparent' && !st.fill) continue; // thửa tự khép: không vẽ nét, chỉ để chạm chọn (có thể tô màu loại đất)
-        ctx.strokeStyle = st.color; ctx.fillStyle = st.color; ctx.lineWidth = w;
+        ctx.strokeStyle = st.color; ctx.fillStyle = st.color; ctx.lineWidth = st.mark ? Math.max(w, 2) : w;
         ctx.setLineDash(st.dash ? [6, 4] : []);
         // đối tượng nhỏ hơn 1px -> chấm
         ctx.beginPath();
@@ -242,14 +244,16 @@
         ctx.fill();
         const CH = 1500;
         if (polys.length) {
-          const doFill = this.fillOn && (st.fill ? polys.length < 60000 && this.fillAlpha !== 0 : polys.length < 8000);
+          const doFill = this.fillOn && (st.mark ? true : st.fill ? polys.length < 60000 && this.fillAlpha !== 0 : polys.length < 8000);
           for (let c0 = 0; c0 < polys.length; c0 += CH) {
             ctx.beginPath();
             const e = Math.min(polys.length, c0 + CH);
             for (let a = c0; a < e; a++) { const i = polys[a]; for (let p = fPart[i]; p < fPart[i + 1]; p++) { trace(ctx, p); ctx.closePath(); } }
             if (doFill) {
-              // tô màu loại đất (theo bảng màu Thông tư) hoặc phủ mờ màu nét
-              if (st.fill) { ctx.fillStyle = st.fill; ctx.globalAlpha = this.fillAlpha != null ? this.fillAlpha : 0.55; } else ctx.globalAlpha = 0.07;
+              // tô màu đánh dấu theo dõi, màu loại đất (theo bảng màu Thông tư) hoặc phủ mờ màu nét
+              if (st.mark) { ctx.fillStyle = st.fill || st.color; ctx.globalAlpha = Math.max(0.45, this.fillAlpha || 0.45); }
+              else if (st.fill) { ctx.fillStyle = st.fill; ctx.globalAlpha = this.fillAlpha != null ? this.fillAlpha : 0.55; }
+              else ctx.globalAlpha = 0.07;
               ctx.fill('evenodd'); ctx.globalAlpha = 1; ctx.fillStyle = st.color;
             }
             ctx.stroke();
@@ -341,10 +345,11 @@
       const f = features[i];
       const cv = (colorOf && colorOf(f)) || '#ffeb3b';
       const col = typeof cv === 'string' ? cv : cv.c, fill = typeof cv === 'string' ? '' : (cv.fill || '');
+      const mark = typeof cv === 'object' && cv && cv.mark ? 1 : 0;
       const dash = f.props && f.props.style ? 1 : 0;
-      const k = col + '|' + dash + '|' + fill;
+      const k = col + '|' + dash + '|' + fill + '|' + mark;
       let si = idx[k];
-      if (si === undefined) { si = styles.length; idx[k] = si; styles.push({ color: col, dash, fill }); }
+      if (si === undefined) { si = styles.length; idx[k] = si; styles.push({ color: col, dash, fill, mark }); }
       d.fStyle[i] = si;
     }
     d.styles = styles;

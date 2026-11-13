@@ -68,7 +68,7 @@
     const Ly = {
       id: ++seq, name: ds.name, type: ds.type, features: ds.features, prj: ds.prj, prjText: ds.prjText || null, isCad: !!ds.isCad, note: ds.note || '',
       visible: true, colorMode: 'file', color: '#ffeb3b', weight: 1.5, hidden: new Set(), layerNames: {}, lidMap: {}, lidList: [], hiddenLids: new Set(),
-      fieldOrder: ds.fieldOrder || null
+      fieldOrder: ds.fieldOrder || null, marks: {}
     };
     if (Ly.fieldOrder) Ly._fields = null;
     const mem = kttMem()[ds.name];
@@ -152,6 +152,27 @@
     return k;
   }
   const luCodeOf = (Ly, f, k) => f.props && k && f.props[k] != null ? LandUse.codeOf(f.props[k]) : '';
+  const MARK_COLORS = [
+    { c: '#22c55e', n: 'Xanh lá (Đã xong)' },
+    { c: '#eab308', n: 'Vàng (Đang xử lý)' },
+    { c: '#f97316', n: 'Cam' },
+    { c: '#ef4444', n: 'Đỏ (Cần kiểm tra)' },
+    { c: '#3b82f6', n: 'Xanh dương' },
+    { c: '#a855f7', n: 'Tím' },
+    { c: '#ec4899', n: 'Hồng' }
+  ];
+  function setFeatureColor(Ly, fis, col) {
+    if (!Ly.marks) Ly.marks = {};
+    for (const idx of fis) {
+      const feat = Ly.features[idx];
+      if (!feat) continue;
+      if (col) { feat.markColor = col; Ly.marks[idx] = col; }
+      else { delete feat.markColor; delete Ly.marks[idx]; }
+    }
+    L.FastLayer.restyle(Ly.data, Ly.features, colorOf(Ly));
+    Ly.fast.redraw();
+    autoSaveSoon(300);
+  }
   const colorOf = (Ly) => {
     const one = Ly.colorMode === 'single' ? Ly.color : null;
     if (Ly.colorMode === 'landuse' && window.LandUse) {
@@ -160,6 +181,7 @@
       const RANH = Ly.ranhColor || S.ranhColor || '#2979ff';
       const ranhLv = new Set(Ly.closeUsed ? Ly.closeUsed.levels.map(String) : []);
       return (f) => {
+        if (f.markColor) return { c: f.markColor, fill: f.markColor, mark: 1 };
         const isRanh = Ly.isCad ? !f.auto && f.props && f.props.layer != null && ranhLv.has(lvNorm(f.props.layer)) : f.kind === 'polygon';
         const base = f.auto ? 'transparent' : isRanh ? RANH : (f.props && f.props.color) || '#ffeb3b';
         if (f.kind !== 'polygon') return base;
@@ -168,7 +190,7 @@
         return { c: base, fill: LandUse.colorOf(code).fill };
       };
     }
-    return (f) => f.auto ? 'transparent' : one || (f.props && f.props.color) || '#ffeb3b';
+    return (f) => f.markColor ? { c: f.markColor, fill: f.markColor, mark: 1 } : (f.auto ? 'transparent' : one || (f.props && f.props.color) || '#ffeb3b');
   };
   /** Thống kê loại đất của lớp: [{code, n, area?}] theo số thửa giảm dần. */
   function luStats(Ly) {
@@ -357,7 +379,8 @@
   function showFeature(Ly, i, latlng) {
     const f = Ly.features[i];
     map.closePopup();
-    select(Ly, f.rid != null ? Ly.features.map((g, j) => g.rid === f.rid && g.kind === f.kind ? j : -1).filter(j => j >= 0).slice(0, 50) : [i], false);
+    const fis = f.rid != null ? Ly.features.map((g, j) => g.rid === f.rid && g.kind === f.kind ? j : -1).filter(j => j >= 0).slice(0, 50) : [i];
+    select(Ly, fis, false);
     const props = f.props || {};
     const to = pick(props, ['soto', 'shbando', 'sobando', 'tobando', 'tobd', 'sotobd', 'shto']);
     const thua = pick(props, ['sothua', 'shthua', 'thua', 'sothututhua', 'parcel', 'parcelno']);
@@ -389,6 +412,8 @@
       const label = k === 'layer' ? (Ly.type === 'DGN' ? 'Level' : 'Layer') : k === 'etype' ? 'Loại' : k;
       rows += '<tr><td>' + esc(label) + '</td><td>' + esc(props[k]) + '</td></tr>';
     });
+    const curCol = f.markColor || '';
+    const dots = MARK_COLORS.map(m => '<button class="fc-dot' + (curCol.toLowerCase() === m.c.toLowerCase() ? ' on' : '') + '" data-c="' + m.c + '" title="' + esc(m.n) + '" style="background:' + m.c + '"></button>').join('');
     const box = $('fInfo');
     box.innerHTML =
       '<div class="fi-grip"></div>' +
@@ -397,9 +422,20 @@
       '<div class="fi-card"><div class="fi-l1">' + (head.join(sep) || esc(Ly.name)) + '</div>' + (line2.length ? '<div class="fi-l2">' + line2.join(sep) + '</div>' : '') +
       (chu ? '<div class="fi-l2">' + kv('Chủ sử dụng', esc(chu)) + '</div>' : '') +
       '<div class="fi-src">' + esc(Ly.name) + '</div></div>' +
+      '<div class="fi-colors"><span class="fc-lab">Đổi màu:</span><div class="fc-list">' + dots +
+      '<label class="fc-pick" title="Chọn màu khác"><input type="color" class="fc-inp" value="' + esc(curCol || '#22c55e') + '"><span>🎨</span></label>' +
+      '<button class="fc-clr' + (curCol ? '' : ' hidden') + '" title="Bỏ màu (về mặc định)">↺ Bỏ</button></div></div>' +
       '<div class="fi-btns"><button class="pc">📍 Tọa độ</button><button class="pt">☰ Thuộc tính</button><button class="pd">⬇ CAD</button></div>' +
       (rows ? '<details class="fi-more"><summary>Tất cả thuộc tính</summary><table>' + rows + '</table></details>' : '');
     box.classList.remove('hidden');
+    const syncColorUI = (c) => {
+      box.querySelectorAll('.fc-dot').forEach(b => b.classList.toggle('on', !!c && b.dataset.c.toLowerCase() === c.toLowerCase()));
+      box.querySelector('.fc-clr').classList.toggle('hidden', !c);
+      if (c) box.querySelector('.fc-inp').value = c;
+    };
+    box.querySelectorAll('.fc-dot').forEach(b => b.onclick = () => { setFeatureColor(Ly, fis, b.dataset.c); syncColorUI(b.dataset.c); });
+    box.querySelector('.fc-inp').oninput = (e) => { setFeatureColor(Ly, fis, e.target.value); syncColorUI(e.target.value); };
+    box.querySelector('.fc-clr').onclick = () => { setFeatureColor(Ly, fis, null); syncColorUI(null); };
     box.querySelector('.fi-x').onclick = closeInfo;
     box.querySelector('.pc').onclick = () => { box.classList.add('hidden'); Attr.showCoords(Ly, i); };
     box.querySelector('.pt').onclick = () => { box.classList.add('hidden'); Attr.showTable(Ly, { only: i }); };
@@ -501,7 +537,8 @@
       ktt: Ly.ktt != null ? Ly.ktt : null, kttProv: Ly.kttProv || null, labelF1: Ly.labelF1 || '', labelF2: Ly.labelF2 || '',
       labelLines: Ly.labelLines || null, ranhColor: Ly.ranhColor || null, labelPx: Ly.labelPx || 13, labelZ: Ly.labelZ || 17,
       edgeLevels: Array.from(Ly.edgeLevels || []), close: Ly.closeUsed || null,
-      props: Ly.dirty ? Ly.features.map(f => f.props || null) : null
+      props: Ly.dirty ? Ly.features.map(f => f.props || null) : null,
+      marks: Ly.marks && Object.keys(Ly.marks).length ? Ly.marks : null
     };
   }
   function applyState(Ly, st) {
@@ -515,6 +552,13 @@
     if (st.props && st.props.length === Ly.features.length) {
       Ly.features.forEach((f, i) => { f.props = st.props[i] || f.props; });
       Ly.dirty = true; Ly._joined = true; Ly._fields = null; Ly._recs = null; Ly._guess = null;
+    }
+    Ly.marks = {};
+    if (st.marks) {
+      for (const k of Object.keys(st.marks)) {
+        const idx = +k, col = st.marks[k];
+        if (Ly.features[idx] && col) { Ly.features[idx].markColor = col; Ly.marks[idx] = col; }
+      }
     }
     build(Ly, re);
     if (!re) rebuildExtra(Ly);
@@ -956,13 +1000,22 @@
     layers.forEach(Ly => {
       const d = document.createElement('div'); d.className = 'layer';
       const subNames = Object.keys(Ly.layerNames || {});
+      const markKeys = Object.keys(Ly.marks || {});
+      let markLeg = '';
+      if (markKeys.length) {
+        const mc = {};
+        markKeys.forEach(k => { const c = Ly.marks[k]; mc[c] = (mc[c] || 0) + 1; });
+        markLeg = '<div class="lu-leg"><div class="lu-h">Đã đánh dấu theo dõi (' + markKeys.length + ' thửa)</div>' +
+          Object.keys(mc).map(c => '<span class="lu-i"><i style="background:' + esc(c) + ';border-color:' + esc(c) + '"></i>' + mc[c] + '</span>').join('') + '</div>';
+      }
       d.innerHTML =
         '<div class="top"><input type="checkbox" class="vis"' + (Ly.visible ? ' checked' : '') + '><div class="name">' + esc(Ly.name) + '</div>' +
         '<input type="color" class="col" value="' + (Ly.colorMode === 'landuse' ? (Ly.ranhColor || S.ranhColor || '#2979ff') : Ly.color) + '" title="' + (Ly.colorMode === 'landuse' ? 'Màu ranh thửa' : 'Màu đơn') + '"></div>' +
         '<div class="meta">' + Ly.type + ' · ' + Ly.features.length + ' đối tượng' + (Ly.textCount ? ' · ' + Ly.textCount + ' chữ' : '') + '<br>' + esc(Ly.crs.label) + (Ly.bad ? '<br>⚠ ' + Ly.bad + ' đối tượng lỗi tọa độ' : '') + (Ly.dirty ? '<br><b style="color:#ffd54a">Đã chỉnh sửa bảng thuộc tính</b>' : '') + '</div>' +
         '<div class="actions"><button class="zoom">Phóng tới</button><button class="tb">Bảng thuộc tính</button><button class="sr">Tra cứu</button><button class="lb">Nhãn</button><button class="eg">Cạnh</button>' + (Ly.crs && (Ly.crs.mode === 'vn3' || Ly.crs.mode === 'vn6') ? '<button class="ktt">Tỉnh/KTT</button>' : '') + (Ly.isCad ? '<button class="kt">Khép thửa' + (Ly.closeStats ? ' (' + Ly.closeStats.parcels + ')' : '') + '</button>' : '') + '<button class="cm">' + (Ly.colorMode === 'file' ? 'Màu: theo file' : Ly.colorMode === 'landuse' ? 'Màu: loại đất' : 'Màu: 1 màu') + '</button>' +
         '<button class="w">Nét: ' + Ly.weight + '</button>' + (subNames.length > 1 ? '<button class="lv">' + (Ly.type === 'DGN' ? 'Level' : 'Layer') + ' (' + subNames.length + ')</button>' : '') +
-        '<button class="rm danger">Xóa</button></div>' + legendHtml(Ly) + '<div class="sub hidden"></div>';
+        (markKeys.length ? '<button class="clrm">Bỏ màu (' + markKeys.length + ')</button>' : '') +
+        '<button class="rm danger">Xóa</button></div>' + markLeg + legendHtml(Ly) + '<div class="sub hidden"></div>';
       d.querySelector('.vis').onchange = (e) => { Ly.visible = e.target.checked; setTimeout(updateLuBar, 0); if (Ly.visible) { Ly.fast.addTo(map); if (S.labels !== false) Ly.text.addTo(map); if (Ly.extra) Ly.extra.addTo(map); } else { map.removeLayer(Ly.fast); map.removeLayer(Ly.text); if (Ly.extra) map.removeLayer(Ly.extra); } };
       d.querySelector('.zoom').onclick = () => { closeSheet(); zoomTo(Ly); };
       d.querySelector('.tb').onclick = () => Attr.showTable(Ly);
@@ -971,6 +1024,11 @@
       d.querySelector('.eg').onclick = () => showEdgeOptions(Ly);
       if (d.querySelector('.kt')) d.querySelector('.kt').onclick = () => showCloseOptions(Ly);
       if (d.querySelector('.ktt')) d.querySelector('.ktt').onclick = () => showKttOptions(Ly);
+      if (d.querySelector('.clrm')) d.querySelector('.clrm').onclick = () => {
+        if (!confirm('Xóa màu đã đánh dấu của ' + markKeys.length + ' thửa trên lớp "' + Ly.name + '"?')) return;
+        Ly.marks = {}; Ly.features.forEach(f => { delete f.markColor; });
+        L.FastLayer.restyle(Ly.data, Ly.features, colorOf(Ly)); Ly.fast.redraw(); autoSaveSoon(300); showLayers();
+      };
       d.querySelector('.col').onchange = (e) => {
         // chế độ màu loại đất: ô màu đổi màu ranh thửa (nhớ cho các lần mở sau)
         if (Ly.colorMode === 'landuse') { Ly.ranhColor = e.target.value; S.ranhColor = e.target.value; save(); }

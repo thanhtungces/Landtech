@@ -179,6 +179,14 @@ body.time-on #fab { bottom: calc(170px + env(safe-area-inset-bottom)); }
 #fInfo .fi-src { font-size: 12px; color: var(--muted); margin-top: 6px; }
 #fInfo .fi-btns { display: flex; gap: 8px; }
 #fInfo .fi-btns button { flex: 1; background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 9px 4px; font-size: 14px; }
+#fInfo .fi-colors { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; flex-wrap: wrap; }
+#fInfo .fc-lab { font-size: 13px; color: var(--muted); white-space: nowrap; }
+#fInfo .fc-list { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; flex: 1; }
+#fInfo .fc-dot { width: 28px; height: 28px; border-radius: 50%; padding: 0; border: 2px solid rgba(255,255,255,.25); box-shadow: 0 1px 3px rgba(0,0,0,.4); flex: none; }
+#fInfo .fc-dot.on { border-color: #fff; box-shadow: 0 0 0 2px var(--accent), 0 1px 4px rgba(0,0,0,.5); transform: scale(1.1); }
+#fInfo .fc-pick { position: relative; width: 28px; height: 28px; border-radius: 50%; background: var(--panel2); border: 1.5px solid var(--border); display: inline-flex; align-items: center; justify-content: center; font-size: 15px; cursor: pointer; overflow: hidden; flex: none; }
+#fInfo .fc-pick input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; padding: 0; border: 0; }
+#fInfo .fc-clr { padding: 4px 9px; font-size: 12.5px; border-radius: 14px; background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
 #fInfo .fi-more { margin-top: 10px; font-size: 13px; }
 #fInfo .fi-more summary { color: var(--muted); padding: 4px 0; }
 #fInfo .fi-more td { padding: 3px 8px 3px 0; vertical-align: top; }
