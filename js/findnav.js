@@ -159,7 +159,7 @@
     if (!C.layers().length) { C.toast('Chưa có dữ liệu. Hãy mở file trước.', true); return; }
     const box = document.createElement('div');
     box.innerHTML =
-      '<div class="seg"><button id="segA">Tờ · thửa · chủ</button><button class="on">Tìm chữ</button></div>' +
+      '<div class="seg"><button id="segA">Tờ · thửa · chủ</button><button class="on">Tìm chữ</button><button id="segK">Kiểm kê</button></div>' +
       '<label class="f">Chữ cần tìm (không phân biệt hoa thường, có dấu hay không dấu)</label>' +
       '<div class="find-row"><input type="text" id="fQ" placeholder="vd: ONT, 125, Nguyễn, Suối Cát…" autocomplete="off"><button class="primary" id="fGo">Tìm</button></div>' +
       '<label class="radio"><input type="checkbox" id="fAttr"' + (lastOpts.attr ? ' checked' : '') + '> Tìm cả trong bảng thuộc tính</label>' +
@@ -169,6 +169,7 @@
     const $ = (s) => box.querySelector(s);
     $('#fQ').value = prefill != null ? prefill : lastQ;
     $('#segA').onclick = () => Attr.showSearch();
+    $('#segK').onclick = () => Attr.showInventory();
     function run() {
       const q = $('#fQ').value;
       lastQ = q;

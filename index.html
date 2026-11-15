@@ -14,7 +14,7 @@
   <meta name="theme-color" content="#0F3D5E">
   <meta name="format-detection" content="telephone=no">
   <link rel="stylesheet" href="lib/leaflet.css">
-  <link rel="stylesheet" href="css/app.css?v=2.19">
+  <link rel="stylesheet" href="css/app.css?v=2.20">
 </head>
 <body>
   <div id="map"></div>
@@ -27,6 +27,7 @@
     <button id="btnCrs" title="Hệ tọa độ">⌖ Hệ tọa độ</button>
     <button id="btnBase" title="Bản đồ nền">🛰 Nền</button>
     <button id="btnSearch" title="Tra cứu tờ - thửa - chủ">🔍 Tra cứu</button>
+    <button id="btnInv" title="Theo dõi kiểm kê">📋 Kiểm kê</button>
     <button id="btnAbout" title="Giới thiệu / bản quyền">ⓘ</button>
   </header>
 
@@ -69,14 +70,14 @@
   <script src="js/gdb.js"></script>
   <script src="js/loaders.js"></script>
   <script src="js/export.js"></script>
-  <script src="js/fastlayer.js?v=2.19"></script>
+  <script src="js/fastlayer.js?v=2.20"></script>
   <script src="js/textlayer.js"></script>
   <script src="js/landuse.js"></script>
-  <script src="js/attr.js"></script>
+  <script src="js/attr.js?v=2.20"></script>
   <script src="js/polygonize.js"></script>
   <script src="js/wayback.js"></script>
-  <script src="js/findnav.js"></script>
-  <script src="js/app.js?v=2.19"></script>
+  <script src="js/findnav.js?v=2.20"></script>
+  <script src="js/app.js?v=2.20"></script>
   <script>
     // bản web / iPhone: chạy offline + xin giữ dữ liệu lâu dài (bản Android không cần)
     if (!window.AndroidBridge && location.protocol === 'https:' && 'serviceWorker' in navigator) {

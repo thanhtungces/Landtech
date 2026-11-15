@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
-  const APP = { name: 'Tung_LandTech', author: 'Nguyễn Thanh Tùng', unit: 'Đội đo đạc – Văn phòng đăng ký đất đai thành phố Đồng Nai', phone: '0356198189', version: '2.19' };
+  const APP = { name: 'Tung_LandTech', author: 'Nguyễn Thanh Tùng', unit: 'Đội đo đạc – Văn phòng đăng ký đất đai thành phố Đồng Nai', phone: '0356198189', version: '2.20' };
 
   // ---------- Cài đặt (lưu cục bộ) ----------
   const DEF = { mode: 'auto', lon0: 107.75, swap: 'auto', usePrj: true, base: 'gsat', labels: true, textMinPx: 3, textScale: 1, dgnUor: 0, prov: 'Đồng Nai', closeLevels: '10,23,31,32', closeTol: 0.1, autoClose: true, autoSave: true, luAlpha: 0 };
@@ -75,6 +75,7 @@
     if (mem && S.autoLon0 !== false) { Ly.ktt = mem.lon0; Ly.kttProv = mem.prov; }
     if (Ly.isCad && S.autoClose !== false) { try { autoClose(Ly); } catch (e) { console.warn('autoClose', e); } }
     assignLids(Ly);
+    ensureInventoryFields(Ly);
     if (!Ly.isCad && luField(Ly)) { Ly.colorMode = 'landuse'; Ly.weight = 2; } // SHP / GDB / GeoJSON có cột loại đất: tô màu theo Thông tư
     layers.push(Ly);
     build(Ly, true);
@@ -153,22 +154,58 @@
   }
   const luCodeOf = (Ly, f, k) => f.props && k && f.props[k] != null ? LandUse.codeOf(f.props[k]) : '';
   const MARK_COLORS = [
-    { c: '#22c55e', n: 'Xanh lá (Đã xong)' },
-    { c: '#eab308', n: 'Vàng (Đang xử lý)' },
-    { c: '#f97316', n: 'Cam' },
-    { c: '#ef4444', n: 'Đỏ (Cần kiểm tra)' },
-    { c: '#3b82f6', n: 'Xanh dương' },
-    { c: '#a855f7', n: 'Tím' },
-    { c: '#ec4899', n: 'Hồng' }
+    { c: '#22c55e', l: 'Đã xong', n: 'Xanh lá (Đã xong)' },
+    { c: '#eab308', l: 'Đang xử lý', n: 'Vàng (Đang xử lý)' },
+    { c: '#f97316', l: 'Chờ bổ sung', n: 'Cam (Chờ bổ sung)' },
+    { c: '#ef4444', l: 'Cần kiểm tra', n: 'Đỏ (Cần kiểm tra)' },
+    { c: '#3b82f6', l: 'Đã đo đạc', n: 'Xanh dương (Đã đo đạc)' },
+    { c: '#a855f7', l: 'Khác', n: 'Tím' },
+    { c: '#ec4899', l: 'Lưu ý', n: 'Hồng' }
   ];
+  const markLabelOf = (col) => {
+    if (!col) return '';
+    const m = MARK_COLORS.find(x => x.c.toLowerCase() === String(col).toLowerCase());
+    return m ? m.l : String(col);
+  };
+  const markColorOfVal = (val) => {
+    if (!val) return '';
+    const s = String(val).trim();
+    if (!s) return '';
+    if (/^#[0-9a-f]{6}$/i.test(s)) return s;
+    const low = s.toLowerCase();
+    const m = MARK_COLORS.find(x => x.l.toLowerCase() === low || x.n.toLowerCase() === low);
+    return m ? m.c : '#22c55e';
+  };
+  function ensureInventoryFields(Ly) {
+    if (!Ly || !Ly.features) return;
+    if (!Ly.marks) Ly.marks = {};
+    let changed = false;
+    for (let i = 0; i < Ly.features.length; i++) {
+      const f = Ly.features[i];
+      if (f.kind === 'text') continue;
+      f.props = f.props || {};
+      if (!('KIEM_KE' in f.props)) { f.props.KIEM_KE = f.markColor ? markLabelOf(f.markColor) : ''; changed = true; }
+      if (!('GHI_CHU_KK' in f.props)) { f.props.GHI_CHU_KK = ''; changed = true; }
+      if (!f.markColor && f.props.KIEM_KE) {
+        const c = markColorOfVal(f.props.KIEM_KE);
+        if (c) { f.markColor = c; Ly.marks[i] = c; }
+      } else if (f.markColor && !f.props.KIEM_KE) {
+        f.props.KIEM_KE = markLabelOf(f.markColor);
+      }
+    }
+    if (changed) Ly._fields = null;
+  }
   function setFeatureColor(Ly, fis, col) {
     if (!Ly.marks) Ly.marks = {};
+    const label = markLabelOf(col);
     for (const idx of fis) {
       const feat = Ly.features[idx];
       if (!feat) continue;
-      if (col) { feat.markColor = col; Ly.marks[idx] = col; }
-      else { delete feat.markColor; delete Ly.marks[idx]; }
+      feat.props = feat.props || {};
+      if (col) { feat.markColor = col; Ly.marks[idx] = col; feat.props.KIEM_KE = label; }
+      else { delete feat.markColor; delete Ly.marks[idx]; feat.props.KIEM_KE = ''; }
     }
+    Ly.dirty = true;
     L.FastLayer.restyle(Ly.data, Ly.features, colorOf(Ly));
     Ly.fast.redraw();
     autoSaveSoon(300);
@@ -292,7 +329,7 @@
     return pts.map(p => { const ll = Ly.P(p); const r = CRS.toVN2000(ll[0], ll[1], S.lon0); return [r.E, r.N]; });
   }
 
-  Attr.init({ layers: () => layers, S, map, openSheet, closeSheet, toast, esc, fmt, loading, select });
+  Attr.init({ layers: () => layers, S, map, openSheet, closeSheet, toast, esc, fmt, loading, select, markColors: MARK_COLORS, markLabelOf });
   FindNav.init({ layers: () => layers, S, map, openSheet, closeSheet, toast, esc, fmt, select });
 
   // Giữ tay (hoặc chuột phải) lên bản đồ: dẫn đường tới điểm đó
@@ -425,6 +462,7 @@
       '<div class="fi-colors"><span class="fc-lab">Đổi màu:</span><div class="fc-list">' + dots +
       '<label class="fc-pick" title="Chọn màu khác"><input type="color" class="fc-inp" value="' + esc(curCol || '#22c55e') + '"><span>🎨</span></label>' +
       '<button class="fc-clr' + (curCol ? '' : ' hidden') + '" title="Bỏ màu (về mặc định)">↺ Bỏ</button></div></div>' +
+      '<div class="fi-note"><input type="text" class="fn-inp" placeholder="Ghi chú kiểm kê (vd: đã ký giáp ranh, vắng chủ…)" value="' + esc(props.GHI_CHU_KK || '') + '"></div>' +
       '<div class="fi-btns"><button class="pc">📍 Tọa độ</button><button class="pt">☰ Thuộc tính</button><button class="pd">⬇ CAD</button></div>' +
       (rows ? '<details class="fi-more"><summary>Tất cả thuộc tính</summary><table>' + rows + '</table></details>' : '');
     box.classList.remove('hidden');
@@ -436,6 +474,11 @@
     box.querySelectorAll('.fc-dot').forEach(b => b.onclick = () => { setFeatureColor(Ly, fis, b.dataset.c); syncColorUI(b.dataset.c); });
     box.querySelector('.fc-inp').oninput = (e) => { setFeatureColor(Ly, fis, e.target.value); syncColorUI(e.target.value); };
     box.querySelector('.fc-clr').onclick = () => { setFeatureColor(Ly, fis, null); syncColorUI(null); };
+    box.querySelector('.fn-inp').onchange = (e) => {
+      const v = e.target.value;
+      for (const idx of fis) { const feat = Ly.features[idx]; if (feat) { feat.props = feat.props || {}; feat.props.GHI_CHU_KK = v; } }
+      Ly.dirty = true; autoSaveSoon(300);
+    };
     box.querySelector('.fi-x').onclick = closeInfo;
     box.querySelector('.pc').onclick = () => { box.classList.add('hidden'); Attr.showCoords(Ly, i); };
     box.querySelector('.pt').onclick = () => { box.classList.add('hidden'); Attr.showTable(Ly, { only: i }); };
@@ -560,6 +603,7 @@
         if (Ly.features[idx] && col) { Ly.features[idx].markColor = col; Ly.marks[idx] = col; }
       }
     }
+    ensureInventoryFields(Ly);
     build(Ly, re);
     if (!re) rebuildExtra(Ly);
     if (!Ly.visible) { map.removeLayer(Ly.fast); map.removeLayer(Ly.text); if (Ly.extra) map.removeLayer(Ly.extra); }
@@ -1026,7 +1070,7 @@
       if (d.querySelector('.ktt')) d.querySelector('.ktt').onclick = () => showKttOptions(Ly);
       if (d.querySelector('.clrm')) d.querySelector('.clrm').onclick = () => {
         if (!confirm('Xóa màu đã đánh dấu của ' + markKeys.length + ' thửa trên lớp "' + Ly.name + '"?')) return;
-        Ly.marks = {}; Ly.features.forEach(f => { delete f.markColor; });
+        Ly.marks = {}; Ly.features.forEach(f => { delete f.markColor; if (f.props && 'KIEM_KE' in f.props) f.props.KIEM_KE = ''; });
         L.FastLayer.restyle(Ly.data, Ly.features, colorOf(Ly)); Ly.fast.redraw(); autoSaveSoon(300); showLayers();
       };
       d.querySelector('.col').onchange = (e) => {
@@ -1118,8 +1162,9 @@
     document.querySelectorAll('input[name=base]').forEach(r => r.onchange = () => { setBase(r.value); closeSheet(); });
   };
 
-  // ---------- Tra cứu & Giới thiệu ----------
+  // ---------- Tra cứu, Kiểm kê & Giới thiệu ----------
   $('btnSearch').onclick = () => Attr.showSearch();
+  $('btnInv').onclick = () => Attr.showInventory();
   $('btnAbout').onclick = () => {
     openSheet('Giới thiệu', '<div class="about"><div class="logo">LT</div><h3>' + APP.name + '</h3><div class="hint">Phiên bản ' + APP.version + '</div>' +
       '<p>Xem, tra cứu và biên tập bản đồ địa chính trên điện thoại.</p>' +

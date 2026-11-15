@@ -306,7 +306,7 @@
     if (!lys.length) { C.toast('Chưa có dữ liệu. Hãy mở file Shapefile/GeoJSON/GDB/DGN/DWG trước.', true); return; }
     const box = document.createElement('div');
     box.innerHTML =
-      '<div class="seg"><button class="on">Tờ · thửa · chủ</button><button id="segB">Tìm chữ</button></div>' +
+      '<div class="seg"><button class="on">Tờ · thửa · chủ</button><button id="segB">Tìm chữ</button><button id="segK">Kiểm kê</button></div>' +
       '<label class="f">Lớp dữ liệu</label><select id="qLy">' + lys.map(L0 => '<option value="' + L0.id + '"' + (startLy && startLy.id === L0.id ? ' selected' : '') + '>' + C.esc(L0.name) + ' (' + L0.type + ')</option>').join('') + '</select>' +
       '<div class="two"><div><label class="f">Số tờ</label><input type="text" id="qTo" inputmode="numeric" placeholder="vd: 12"></div><div><label class="f">Số thửa</label><input type="text" id="qThua" inputmode="numeric" placeholder="vd: 345"></div></div>' +
       '<label class="f">Tên chủ sử dụng / từ khóa bất kỳ</label><input type="text" id="qChu" placeholder="vd: Nguyễn Văn A, ONT, ...">' +
@@ -359,10 +359,112 @@
       Ly._lastResult = res;
     }
     $('#segB').onclick = () => FindNav.showTextSearch();
+    $('#segK').onclick = () => showInventory(cur());
     $('#qGo').onclick = run;
     box.querySelectorAll('input[type=text]').forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') run(); }));
     $('#qTable').onclick = () => showTable(cur());
     $('#qMap').onclick = () => showMapping(cur(), () => showSearch(cur()));
+  }
+
+  // ---------- Kiểm kê thửa đất ----------
+  function showInventory(startLy) {
+    const lys = C.layers().filter(L0 => L0.features.some(f => f.kind !== 'text'));
+    if (!lys.length) { C.toast('Chưa có dữ liệu. Hãy mở file Shapefile/GeoJSON/GDB/DGN/DWG trước.', true); return; }
+    const box = document.createElement('div');
+    let curFilter = 'all', qTxt = '';
+    const $ = (id) => box.querySelector(id);
+    box.innerHTML =
+      '<div class="seg"><button id="segA">Tờ · thửa · chủ</button><button id="segB">Tìm chữ</button><button class="on">Kiểm kê</button></div>' +
+      '<label class="f">Lớp dữ liệu</label><select id="kLy">' + lys.map(L0 => '<option value="' + L0.id + '"' + (startLy && startLy.id === L0.id ? ' selected' : '') + '>' + C.esc(L0.name) + ' (' + L0.type + ')</option>').join('') + '</select>' +
+      '<div id="kStats" class="inv-stats"></div>' +
+      '<div id="kChips" class="inv-chips"></div>' +
+      '<div class="find-row" style="margin:6px 0"><input type="text" id="kQ" placeholder="Lọc số tờ, số thửa, tên chủ, ghi chú…"></div>' +
+      '<div class="btnrow" style="margin:6px 0 8px"><button class="primary" id="kCsv">⬇ Xuất CSV kiểm kê</button><button id="kShp">⬇ Shapefile (.zip)</button><button id="kGj">⬇ GeoJSON</button></div>' +
+      '<div id="kMsg" class="hint"></div><div id="kRes"></div>';
+    C.openSheet('📋 Theo dõi kiểm kê', box);
+    const cur = () => lys.find(L0 => L0.id == $('#kLy').value);
+    function draw() {
+      const Ly = cur(); if (!Ly) return;
+      prepareForSearch(Ly);
+      const recs = recordsOf(Ly, Ly.isCad);
+      let done = 0, todo = 0;
+      const byStatus = {};
+      for (const r of recs) {
+        const f = Ly.features[r.first], p = f.props || {};
+        const st = (p.KIEM_KE || '').trim();
+        const col = f.markColor || '';
+        if (st || col) {
+          done++;
+          const keySt = st || col;
+          if (!byStatus[keySt]) byStatus[keySt] = { n: 0, c: col || '#22c55e' };
+          byStatus[keySt].n++;
+        } else todo++;
+      }
+      const total = recs.length;
+      const pct = total ? Math.round(done * 100 / total) : 0;
+      $('#kStats').innerHTML = 'Tổng: <b>' + total + '</b> thửa · Đã kiểm kê: <b style="color:#22c55e">' + done + '</b> (' + pct + '%) · Chưa xong: <b style="color:#ffd54a">' + todo + '</b>';
+      const chips = [
+        { k: 'all', label: 'Tất cả (' + total + ')', c: '' },
+        { k: 'todo', label: 'Chưa kiểm kê (' + todo + ')', c: '' }
+      ];
+      Object.keys(byStatus).forEach(k => chips.push({ k, label: k + ' (' + byStatus[k].n + ')', c: byStatus[k].c }));
+      $('#kChips').innerHTML = chips.map(ch =>
+        '<button class="inv-chip' + (curFilter === ch.k ? ' on' : '') + '" data-k="' + C.esc(ch.k) + '">' +
+        (ch.c ? '<i style="background:' + C.esc(ch.c) + '"></i>' : '') + C.esc(ch.label) + '</button>'
+      ).join('');
+      $('#kChips').querySelectorAll('.inv-chip').forEach(b => b.onclick = () => { curFilter = b.dataset.k; draw(); });
+
+      const nq = norm(qTxt);
+      const list = [];
+      for (const r of recs) {
+        const f = Ly.features[r.first], p = f.props || {};
+        const st = (p.KIEM_KE || '').trim(), col = f.markColor || '', note = (p.GHI_CHU_KK || '').trim();
+        const keySt = st || col;
+        if (curFilter === 'todo' && keySt) continue;
+        if (curFilter !== 'all' && curFilter !== 'todo' && keySt !== curFilter) continue;
+        if (nq) {
+          const l = featLabel(Ly, f);
+          const hay = norm([l.to, l.thua, l.chu, l.loai, st, note].join(' '));
+          if (hay.indexOf(nq) < 0) continue;
+        }
+        list.push(r);
+        if (list.length >= 200) break;
+      }
+      $('#kMsg').textContent = 'Hiển thị ' + list.length + ' thửa' + (list.length >= 200 ? ' (200 đầu)' : '') + ' · Cột tự động trong dữ liệu: KIEM_KE, GHI_CHU_KK';
+      const out = $('#kRes'); out.innerHTML = '';
+      list.forEach(r => {
+        const f = Ly.features[r.first], p = f.props || {}, l = featLabel(Ly, f);
+        const st = (p.KIEM_KE || '').trim(), col = f.markColor || '', note = (p.GHI_CHU_KK || '').trim();
+        const row = document.createElement('div'); row.className = 'resrow';
+        row.innerHTML =
+          '<div class="rt">' + (l.to !== '' && l.to != null ? 'Tờ ' + C.esc(l.to) + ' · ' : '') + 'Thửa <b>' + C.esc(l.thua !== '' && l.thua != null ? l.thua : '#' + (r.first + 1)) + '</b>' +
+          (l.loai ? ' · ' + C.esc(l.loai) : '') + (l.dt !== '' && l.dt != null ? ' · ' + C.esc(l.dt) + ' m²' : '') +
+          (st || col ? ' <span class="inv-badge" style="background:' + C.esc(col || '#22c55e') + '">' + C.esc(st || 'Đã đánh dấu') + '</span>' : '') +
+          '</div>' +
+          (l.chu ? '<div class="rs">' + C.esc(l.chu) + '</div>' : '') +
+          (note ? '<div class="rs" style="color:#ffd54a">📝 ' + C.esc(note) + '</div>' : '') +
+          '<div class="ra"><button class="z">Xem</button><button class="e">Thuộc tính</button><button class="n">🚗</button></div>';
+        row.querySelector('.z').onclick = () => { C.closeSheet(); C.select(Ly, r.fi, true); };
+        row.querySelector('.e').onclick = () => showTable(Ly, { only: r.first });
+        row.querySelector('.n').onclick = () => {
+          const pt = FindNav.featCenter(Ly, r.fi);
+          if (pt) FindNav.navTo(pt.lat, pt.lng, (l.to !== '' && l.to != null ? 'Tờ ' + l.to + ' · ' : '') + 'Thửa ' + (l.thua !== '' && l.thua != null ? l.thua : '#' + (r.first + 1)));
+        };
+        out.appendChild(row);
+      });
+    }
+    $('#segA').onclick = () => showSearch(cur());
+    $('#segB').onclick = () => FindNav.showTextSearch();
+    $('#kLy').onchange = () => { curFilter = 'all'; draw(); };
+    $('#kQ').oninput = (e) => { qTxt = e.target.value; draw(); };
+    $('#kCsv').onclick = () => {
+      const Ly = cur(); if (!Ly) return;
+      const fields = fieldsOf(Ly);
+      exportAction(Ly, 'csv', recordsOf(Ly, false), fields);
+    };
+    $('#kShp').onclick = () => { const Ly = cur(); if (Ly) exportAction(Ly, 'shp', [], fieldsOf(Ly)); };
+    $('#kGj').onclick = () => { const Ly = cur(); if (Ly) exportAction(Ly, 'gj', [], fieldsOf(Ly)); };
+    draw();
   }
 
   function showMapping(Ly, back) {
@@ -487,5 +589,5 @@
     } catch (e) { C.loading(false); C.toast('Lỗi xuất: ' + e.message, true); }
   }
 
-  global.Attr = { fields: (Ly) => { prepareForSearch(Ly); return fieldsOf(Ly); }, guess: (Ly) => { prepareForSearch(Ly); return guessFields(Ly); }, labelPoint, init, showSearch, showTable, showCoords, buildDxf, coordCsv, vnRings, areaOf, ringPer, safeName, stamp, doSave, joinCadLabels, recordsOf };
+  global.Attr = { fields: (Ly) => { prepareForSearch(Ly); return fieldsOf(Ly); }, guess: (Ly) => { prepareForSearch(Ly); return guessFields(Ly); }, labelPoint, init, showSearch, showInventory, showTable, showCoords, buildDxf, coordCsv, vnRings, areaOf, ringPer, safeName, stamp, doSave, joinCadLabels, recordsOf };
 })(window);
