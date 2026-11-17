@@ -37,7 +37,7 @@
       nguoiKy: 'LÊ VĂN NGỌC',
       rauLevels: '10,23,31,32',
       useRau: true,
-      marginPct: 35,
+      marginPct: 15,
       showVerts: true,
       showNeighbor: true,
       decimals: 2
@@ -118,7 +118,7 @@
     return ins;
   }
 
-  /** Tính khung sơ đồ cân đối tỷ lệ W:H quanh thửa đất. */
+  /** Tính khung sơ đồ cân đối tỷ lệ W:H quanh thửa đất + vùng cắt râu thửa ngắn gọn. */
   function computeFrame(outer, marginPct, boxW, boxH) {
     let minE = Infinity, minN = Infinity, maxE = -Infinity, maxN = -Infinity;
     for (const p of outer) {
@@ -128,13 +128,19 @@
       if (p.N > maxN) maxN = p.N;
     }
     const w = Math.max(maxE - minE, 2), h = Math.max(maxN - minN, 2);
-    const pad = Math.max(w, h) * (Math.max(5, Number(marginPct) || 35) / 100);
+    const pct = Math.max(5, Number(marginPct) || 15) / 100;
+    const span = Math.max(w, h);
+    const pad = span * Math.max(0.14, pct);
+    const rauPad = span * pct * 0.85;
     let fw = w + pad * 2, fh = h + pad * 2;
     const targetAspect = boxW / boxH;
     if (fw / fh < targetAspect) fw = fh * targetAspect;
     else fh = fw / targetAspect;
     const cx = (minE + maxE) / 2, cy = (minN + maxN) / 2;
-    return { minE: cx - fw / 2, maxE: cx + fw / 2, minN: cy - fh / 2, maxN: cy + fh / 2, fw, fh };
+    return {
+      minE: cx - fw / 2, maxE: cx + fw / 2, minN: cy - fh / 2, maxN: cy + fh / 2, fw, fh,
+      rauBox: { minE: minE - rauPad, maxE: maxE + rauPad, minN: minN - rauPad, maxN: maxN + rauPad }
+    };
   }
 
   /** Trích xuất các đoạn râu thửa (theo level 10, 23, 31, 32) và nhãn thửa lân cận trong khung. */
@@ -145,7 +151,8 @@
 
     const lvSet = parseLevels(levelsStr);
     const labelLvSet = new Set(['3', '13']);
-    const { minE, minN, maxE, maxN } = frame;
+    const rb = frame.rauBox || frame;
+    const { minE, minN, maxE, maxN } = rb;
     const isInFrame = (e, n) => e >= minE && e <= maxE && n >= minN && n <= maxN;
 
     const pushRing = (pts, closed, lv) => {
@@ -383,48 +390,52 @@
     const chucVuHtml = form.chucVu.split('\n').map(l => '<div><b>' + esc(l) + '</b></div>').join('');
     const dateLine = esc(form.diaDanh) + ', ngày ' + esc(form.ngay) + ' tháng ' + esc(form.thang) + ' năm ' + esc(form.nam);
     const coordTable = buildCoordTableHtml(outer, form.decimals);
-    const compactClass = outer.length > 16 ? ' compact' : '';
+    const compactClass = outer.length > 22 ? ' compact2' : (outer.length > 14 ? ' compact' : '');
 
     return '<!doctype html>' +
       '<html' + (isWord ? ' xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"' : '') + '>' +
       '<head><meta charset="utf-8"><title>Trích lục bản đồ địa chính - Phụ lục 19</title>' +
       '<style>' +
-      '@page{size:A4 portrait;margin:10mm 10mm 10mm 10mm;}' +
+      '@page{size:A4 portrait;margin:9mm 10mm 9mm 10mm;}' +
+      '@page Section1{size:210mm 297mm;margin:9mm 10mm 9mm 10mm;mso-header-margin:5mm;mso-footer-margin:5mm;}' +
+      'div.Section1{page:Section1;}' +
       '*{box-sizing:border-box;}' +
-      'body{margin:0;padding:0;background:#fff;color:#000;font-family:"Times New Roman",Times,serif;font-size:11pt;line-height:1.35;}' +
-      '.page{width:190mm;margin:0 auto;border:1.8px solid #000;padding:8mm 9mm 9mm 9mm;background:#fff;}' +
-      '.top-row{width:100%;border-collapse:collapse;margin-bottom:4px;}' +
+      'body{margin:0;padding:0;background:#fff;color:#000;font-family:"Times New Roman",Times,serif;font-size:11pt;line-height:1.3;}' +
+      '.page{width:100%;max-width:188mm;min-height:274mm;margin:0 auto;border:1.8px solid #000;padding:7mm 8mm 7mm 8mm;background:#fff;page-break-inside:avoid;break-inside:avoid;}' +
+      '.top-row{width:100%;border-collapse:collapse;margin-bottom:2px;}' +
       '.top-row td{vertical-align:top;padding:0;}' +
       '.pl-lbl{font-size:11pt;}' +
       '.hd-lbl{font-size:9pt;text-align:right;}' +
-      '.title{text-align:center;font-size:14.5pt;font-weight:bold;margin:4px 0 2px;letter-spacing:0.2px;}' +
-      '.sub{text-align:center;font-size:11.5pt;margin:0 0 10px;}' +
-      '.info-line{margin:3px 0;font-size:11pt;}' +
-      '.khac{margin:2px 0 4px 12px;font-size:10.5pt;line-height:1.35;}' +
-      '.main-grid{width:100%;border-collapse:collapse;margin-top:8px;table-layout:fixed;}' +
+      '.title{text-align:center;font-size:14pt;font-weight:bold;margin:2px 0 2px;letter-spacing:0.2px;}' +
+      '.sub{text-align:center;font-size:11pt;margin:0 0 8px;}' +
+      '.info-line{margin:2.5px 0;font-size:10.5pt;}' +
+      '.khac{margin:2px 0 3px 12px;font-size:10pt;line-height:1.3;}' +
+      '.main-grid{width:100%;border-collapse:collapse;margin-top:6px;table-layout:fixed;page-break-inside:avoid;break-inside:avoid;}' +
       '.main-grid > tbody > tr > td{vertical-align:top;padding:0;}' +
       '.col-left{width:56%;padding-right:6px !important;}' +
       '.col-right{width:44%;padding-left:4px !important;}' +
-      '.sec-h{font-size:11pt;margin:0 0 4px;}' +
+      '.sec-h{font-size:10.5pt;margin:0 0 3px;}' +
       '.map-box{border:1px solid #000;background:#fff;overflow:hidden;}' +
       '.tcoord{width:100%;border-collapse:collapse;font-size:9pt;font-variant-numeric:tabular-nums;}' +
       '.compact .tcoord{font-size:8pt;}' +
+      '.compact2 .tcoord{font-size:7pt;line-height:1.1;}' +
       '.tcoord th,.tcoord td{border:1px solid #000;padding:1px 3px;}' +
+      '.compact2 .tcoord th,.compact2 .tcoord td{padding:0.5px 2px;}' +
       '.tcoord th{font-weight:normal;text-align:center;padding:2px 3px;background:#fff;}' +
       '.tcoord td.c{text-align:center;}' +
       '.tcoord td.r{text-align:right;padding-right:4px;}' +
-      '.tcoord td.sp-top{border-bottom:none !important;height:7px;}' +
-      '.tcoord td.sp-bot{border-top:none !important;height:7px;font-size:8pt;color:#333;}' +
+      '.tcoord td.sp-top{border-bottom:none !important;height:6px;}' +
+      '.tcoord td.sp-bot{border-top:none !important;height:6px;font-size:7.5pt;color:#333;}' +
       '.tcoord td.edge{text-align:center;}' +
-      '.sign-grid{width:100%;border-collapse:collapse;margin-top:14px;font-size:10.5pt;}' +
+      '.sign-grid{width:100%;border-collapse:collapse;margin-top:10px;font-size:10.5pt;page-break-inside:avoid;break-inside:avoid;}' +
       '.sign-grid td{width:50%;vertical-align:top;text-align:center;padding:0 4px;}' +
       '.italic{font-style:italic;}' +
-      '.sig-space{height:44px;}' +
+      '.sig-space{height:38px;}' +
       '.sig-name{font-weight:bold;text-transform:uppercase;}' +
-      '@media screen{body{background:#e5e7eb;padding:12px;}.page{box-shadow:0 2px 14px rgba(0,0,0,0.2);}}' +
-      '@media print{body{background:#fff;padding:0;}.page{box-shadow:none;width:100%;}}' +
+      '@media screen{body{background:#e5e7eb;padding:10px;}.page{box-shadow:0 2px 14px rgba(0,0,0,0.2);}}' +
+      '@media print{body{background:#fff;padding:0;}.page{box-shadow:none;width:100%;max-width:none;min-height:275mm;}}' +
       '</style></head>' +
-      '<body><div class="page' + compactClass + '">' +
+      '<body><div class="Section1"><div class="page' + compactClass + '">' +
       '<table class="top-row"><tr>' +
       '<td class="pl-lbl">Phụ lục số 19</td>' +
       '<td class="hd-lbl">' + (form.hopDong ? 'Hợp đồng số: ' + esc(form.hopDong) : '') + '</td>' +
@@ -460,7 +471,7 @@
       '<div class="sig-name">' + esc(form.nguoiKy) + '</div>' +
       '</td>' +
       '</tr></tbody></table>' +
-      '</div></body></html>';
+      '</div></div></body></html>';
   }
 
   /** Tạo file DXF gồm thửa chính, mốc cắm và các đoạn râu thửa (10, 23, 31, 32) đã cắt theo khung. */
@@ -545,11 +556,11 @@
       '<div class="two">' +
         '<div><label class="f"><input type="checkbox" id="tlUseRau"' + (cfg.useRau ? ' checked' : '') + '> Lấy râu thửa (Level)</label>' +
         '<input type="text" id="tlLevels" value="' + C.esc(cfg.rauLevels) + '" placeholder="10,23,31,32"></div>' +
-        '<div><label class="f">Khung sơ đồ</label><select id="tlMargin">' +
-          '<option value="20"' + (cfg.marginPct == 20 ? ' selected' : '') + '>Chặt (20%)</option>' +
-          '<option value="35"' + (cfg.marginPct == 35 ? ' selected' : '') + '>Vừa (35%)</option>' +
-          '<option value="55"' + (cfg.marginPct == 55 ? ' selected' : '') + '>Rộng (55%)</option>' +
-          '<option value="80"' + (cfg.marginPct == 80 ? ' selected' : '') + '>Rất rộng (80%)</option>' +
+        '<div><label class="f">Độ dài râu thửa</label><select id="tlMargin">' +
+          '<option value="10"' + (cfg.marginPct == 10 ? ' selected' : '') + '>Ngắn (10%)</option>' +
+          '<option value="15"' + (cfg.marginPct == 15 ? ' selected' : '') + '>Vừa (15%)</option>' +
+          '<option value="25"' + (cfg.marginPct == 25 ? ' selected' : '') + '>Hơi rộng (25%)</option>' +
+          '<option value="40"' + (cfg.marginPct == 40 ? ' selected' : '') + '>Rộng (40%)</option>' +
         '</select></div>' +
       '</div>' +
       '<div class="two" style="margin-top:6px;">' +
@@ -595,7 +606,7 @@
         '<button id="tlDxf">⬇ CAD (râu thửa)</button>' +
       '</div>';
 
-    C.openSheet('Trích lục BĐĐC (Phụ lục 19 – TT26)', box);
+    C.openSheet('Trích lục BĐĐC (Phụ lục 19 – TT26)', box, true);
 
     const $ = (id) => box.querySelector(id);
     const readForm = () => ({
