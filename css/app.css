@@ -38,8 +38,6 @@ button.danger { color: var(--danger); }
 #measureBox .row button { padding: 5px 10px; font-size: 13px; }
 
 #sheet { position: absolute; z-index: 1100; left: 0; right: 0; bottom: 0; max-height: 72%; background: var(--panel); border-radius: 16px 16px 0 0; box-shadow: 0 -4px 20px rgba(0,0,0,.5); display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); }
-#sheet.sheet-lg { max-height: 92%; }
-@media (min-width: 720px) { #sheet.sheet-lg { left: 50%; right: auto; width: min(760px, 96vw); transform: translateX(-50%); } }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); }
 .sheet-head h2 { margin: 0; font-size: 17px; }
 .sheet-head button { border: none; background: none; font-size: 20px; }
