@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
-  const APP = { name: 'Tung_LandTech', author: 'Nguyễn Thanh Tùng', unit: 'Đội đo đạc – Văn phòng đăng ký đất đai thành phố Đồng Nai', phone: '0356198189', version: '2.22' };
+  const APP = { name: 'Tung_LandTech', author: 'Nguyễn Thanh Tùng', unit: 'Đội đo đạc – Văn phòng đăng ký đất đai thành phố Đồng Nai', phone: '0356198189', version: '2.23' };
 
   // ---------- Cài đặt (lưu cục bộ) ----------
   const DEF = { mode: 'auto', lon0: 107.75, swap: 'auto', usePrj: true, base: 'gsat', labels: true, textMinPx: 3, textScale: 1, dgnUor: 0, prov: 'Đồng Nai', closeLevels: '10,23,31,32', closeTol: 0.1, autoClose: true, autoSave: true, luAlpha: 0 };

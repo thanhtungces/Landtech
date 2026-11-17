@@ -2,7 +2,7 @@
  * Tung_LandTech – chạy offline khi cài lên iPhone / iPad (web app).
  * Lưu sẵn toàn bộ file của app; ảnh nền vệ tinh vẫn tải qua mạng.
  */
-const CACHE = 'tlt-v2.22-202611170247';
+const CACHE = 'tlt-v2.23-202611170254';
 const FILES = [
     './',
     'css/app.css',

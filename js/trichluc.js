@@ -143,8 +143,31 @@
     };
   }
 
-  /** Trích xuất các đoạn râu thửa (theo level 10, 23, 31, 32) và nhãn thửa lân cận trong khung. */
-  function extractRauThua(Ly, targetFeat, outerVN, frame, levelsStr, wantRau, wantNeighbor) {
+  /** Khoảng cách từ điểm (e, n) tới biên đa giác outer và điểm gần nhất trên biên. */
+  function distToBoundary(e, n, ring) {
+    let bestD2 = Infinity, bestE = e, bestN = n;
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length];
+      const dx = b.E - a.E, dy = b.N - a.N, l2 = dx * dx + dy * dy;
+      let t = l2 > 1e-12 ? ((e - a.E) * dx + (n - a.N) * dy) / l2 : 0;
+      if (t < 0) t = 0; else if (t > 1) t = 1;
+      const px = a.E + t * dx, py = a.N + t * dy;
+      const d2 = (e - px) * (e - px) + (n - py) * (n - py);
+      if (d2 < bestD2) { bestD2 = d2; bestE = px; bestN = py; }
+    }
+    return { d: Math.sqrt(bestD2), E: bestE, N: bestN };
+  }
+
+  /** Cắt đoạn râu từ điểm nút (ae, an) hướng tới (be, bn) với độ dài tối đa stubLen. */
+  function trimStub(ae, an, be, bn, stubLen) {
+    const dx = be - ae, dy = bn - an, len = Math.hypot(dx, dy);
+    if (len <= 1e-6) return null;
+    const t = Math.min(1, stubLen / len);
+    return [ae, an, ae + dx * t, an + dy * t];
+  }
+
+  /** Trích xuất râu thửa chỉ tại các điểm nút tiếp giáp biên thửa chính (Level 10, 23, 31, 32). */
+  function extractRauThua(Ly, targetFeat, outerVN, frame, levelsStr, wantRau, wantNeighbor, marginPct) {
     const segs = []; // { ax, ay, bx, by, lv }
     const labels = []; // { e, n, text }
     if (!wantRau && !wantNeighbor) return { segs, labels };
@@ -155,25 +178,63 @@
     const { minE, minN, maxE, maxN } = rb;
     const isInFrame = (e, n) => e >= minE && e <= maxE && n >= minN && n <= maxN;
 
+    let pMinE = Infinity, pMinN = Infinity, pMaxE = -Infinity, pMaxN = -Infinity;
+    for (const p of outerVN) {
+      if (p.E < pMinE) pMinE = p.E; if (p.N < pMinN) pMinN = p.N;
+      if (p.E > pMaxE) pMaxE = p.E; if (p.N > pMaxN) pMaxN = p.N;
+    }
+    const span = Math.max(pMaxE - pMinE, pMaxN - pMinN, 2);
+    const stubLen = span * (Math.max(5, Number(marginPct) || 15) / 100);
+    const tol = Math.max(0.25, Math.min(1.0, span * 0.01));
+
+    const addOutwardStub = (je, jn, oe, on, lv) => {
+      const trimmed = trimStub(je, jn, oe, on, stubLen);
+      if (!trimmed) return;
+      // Bỏ đoạn nằm trùng biên hoặc đi vào trong thửa chính
+      const midE = (trimmed[0] + trimmed[2]) / 2, midN = (trimmed[1] + trimmed[3]) / 2;
+      if (pointInRingVN(outerVN, midE, midN)) return;
+      if (distToBoundary(trimmed[2], trimmed[3], outerVN).d <= tol) return;
+      const c = clipSegment(trimmed[0], trimmed[1], trimmed[2], trimmed[3], frame.minE, frame.minN, frame.maxE, frame.maxN);
+      if (c) segs.push({ ax: c[0], ay: c[1], bx: c[2], by: c[3], lv });
+    };
+
     const pushRing = (pts, closed, lv) => {
       if (!pts || pts.length < 2) return;
-      // Kiểm tra nhanh bounding box VN-2000
       const vpts = new Array(pts.length);
       let bMinE = Infinity, bMinN = Infinity, bMaxE = -Infinity, bMaxN = -Infinity;
       for (let i = 0; i < pts.length; i++) {
         const v = Attr.toVN(Ly, pts[i]);
         vpts[i] = v;
-        if (v.E < bMinE) bMinE = v.E;
-        if (v.N < bMinN) bMinN = v.N;
-        if (v.E > bMaxE) bMaxE = v.E;
-        if (v.N > bMaxN) bMaxN = v.N;
+        if (v.E < bMinE) bMinE = v.E; if (v.N < bMinN) bMinN = v.N;
+        if (v.E > bMaxE) bMaxE = v.E; if (v.N > bMaxN) bMaxN = v.N;
       }
-      if (bMaxE < minE || bMinE > maxE || bMaxN < minN || bMinN > maxN) return;
+      if (bMaxE < pMinE - tol || bMinE > pMaxE + tol || bMaxN < pMinN - tol || bMinN > pMaxN + tol) return;
       const nSeg = closed ? vpts.length : vpts.length - 1;
       for (let i = 0; i < nSeg; i++) {
         const a = vpts[i], b = vpts[(i + 1) % vpts.length];
-        const c = clipSegment(a.E, a.N, b.E, b.N, minE, minN, maxE, maxN);
-        if (c) segs.push({ ax: c[0], ay: c[1], bx: c[2], by: c[3], lv });
+        if (Math.max(a.E, b.E) < pMinE - tol || Math.min(a.E, b.E) > pMaxE + tol || Math.max(a.N, b.N) < pMinN - tol || Math.min(a.N, b.N) > pMaxN + tol) continue;
+        const da = distToBoundary(a.E, a.N, outerVN);
+        const db = distToBoundary(b.E, b.N, outerVN);
+        if (da.d <= tol && db.d > tol) {
+          addOutwardStub(da.E, da.N, b.E, b.N, lv);
+        } else if (db.d <= tol && da.d > tol) {
+          addOutwardStub(db.E, db.N, a.E, a.N, lv);
+        } else if (da.d > tol && db.d > tol) {
+          // Trường hợp đoạn dài chạy ngang qua tiếp giáp với 1 đỉnh của thửa
+          const dx = b.E - a.E, dy = b.N - a.N, l2 = dx * dx + dy * dy;
+          if (l2 > 1e-9) {
+            for (const v of outerVN) {
+              const t = ((v.E - a.E) * dx + (v.N - a.N) * dy) / l2;
+              if (t <= 0 || t >= 1) continue;
+              const px = a.E + t * dx, py = a.N + t * dy;
+              if (Math.hypot(px - v.E, py - v.N) <= tol) {
+                addOutwardStub(px, py, a.E, a.N, lv);
+                addOutwardStub(px, py, b.E, b.N, lv);
+                break;
+              }
+            }
+          }
+        }
       }
     };
 
@@ -257,41 +318,17 @@
       svg += '<polygon points="' + p2str(h) + '" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/>';
     }
 
-    // 4. Số đỉnh & kích thước cạnh
+    // 4. Số đỉnh thửa (không xuất kích thước cạnh lên sơ đồ hình thửa)
     if (opts.showVerts && outer.length >= 3) {
       const ptsPx = outer.map(p => ({ x: sx(p.E), y: sy(p.N) }));
-      let cx = 0, cy = 0, sa = 0;
-      for (let i = 0; i < ptsPx.length; i++) {
-        const p = ptsPx[i], q = ptsPx[(i + 1) % ptsPx.length];
-        cx += p.x; cy += p.y;
-        sa += p.x * q.y - q.x * p.y;
-      }
+      let cx = 0, cy = 0;
+      for (let i = 0; i < ptsPx.length; i++) { cx += ptsPx[i].x; cy += ptsPx[i].y; }
       cx /= ptsPx.length; cy /= ptsPx.length;
 
-      // Chiều dài cạnh
-      for (let i = 0; i < outer.length; i++) {
-        const j = (i + 1) % outer.length;
-        const p = ptsPx[i], q = ptsPx[j];
-        const pixLen = Math.hypot(q.x - p.x, q.y - p.y);
-        if (pixLen < 18) continue;
-        const dist = Math.hypot(outer[j].E - outer[i].E, outer[j].N - outer[i].N);
-        const txt = dist.toFixed(opts.decimals);
-        const dx = q.x - p.x, dy = q.y - p.y, d = pixLen || 1;
-        let ang = Math.atan2(dy, dx) * 180 / Math.PI;
-        if (ang > 90) ang -= 180;
-        else if (ang < -90) ang += 180;
-        // Đẩy ra ngoài thửa (trong hệ tọa độ SVG y hướng xuống, sa > 0 là cùng chiều kim đồng hồ)
-        const s = sa >= 0 ? 1 : -1;
-        const ox = (dy / d) * s * 8, oy = (-dx / d) * s * 8;
-        const mx = (p.x + q.x) / 2 + ox, my = (p.y + q.y) / 2 + oy;
-        svg += '<text x="' + mx.toFixed(1) + '" y="' + my.toFixed(1) + '" font-size="8.5" fill="#111" text-anchor="middle" dominant-baseline="central" transform="rotate(' + ang.toFixed(1) + ' ' + mx.toFixed(1) + ' ' + my.toFixed(1) + ')" style="paint-order:stroke;stroke:#fff;stroke-width:2.5px;stroke-linejoin:round;">' + txt + '</text>';
-      }
-
-      // Đỉnh thửa
       let lastV = null;
       for (let i = 0; i < ptsPx.length; i++) {
         const p = ptsPx[i];
-        svg += '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="2.1" fill="#fff" stroke="#000" stroke-width="1"/>';
+        svg += '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="2.0" fill="#fff" stroke="#000" stroke-width="1"/>';
         if (lastV && Math.hypot(p.x - lastV.x, p.y - lastV.y) < 13) continue;
         lastV = p;
         let ux = p.x - cx, uy = p.y - cy;
@@ -564,7 +601,7 @@
         '</select></div>' +
       '</div>' +
       '<div class="two" style="margin-top:6px;">' +
-        '<label class="f" style="margin:4px 0;"><input type="checkbox" id="tlVerts"' + (cfg.showVerts ? ' checked' : '') + '> Số đỉnh &amp; cạnh</label>' +
+        '<label class="f" style="margin:4px 0;"><input type="checkbox" id="tlVerts"' + (cfg.showVerts ? ' checked' : '') + '> Số đỉnh trên sơ đồ</label>' +
         '<label class="f" style="margin:4px 0;"><input type="checkbox" id="tlNeigh"' + (cfg.showNeighbor ? ' checked' : '') + '> Số thửa lân cận</label>' +
       '</div>' +
       '<div class="two">' +
@@ -612,7 +649,7 @@
     const readForm = () => ({
       useRau: $('#tlUseRau').checked,
       rauLevels: $('#tlLevels').value.trim() || '10,23,31,32',
-      marginPct: Number($('#tlMargin').value) || 35,
+      marginPct: Number($('#tlMargin').value) || 15,
       showVerts: $('#tlVerts').checked,
       showNeighbor: $('#tlNeigh').checked,
       soTrichLuc: $('#tlSo').value,
@@ -643,7 +680,7 @@
       const fm = readForm();
       saveCfg(fm);
       const frame = computeFrame(outer, fm.marginPct, 360, 270);
-      const rau = extractRauThua(Ly, f, outer, frame, fm.rauLevels, fm.useRau, fm.showNeighbor);
+      const rau = extractRauThua(Ly, f, outer, frame, fm.rauLevels, fm.useRau, fm.showNeighbor, fm.marginPct);
       curData = { frame, outer, holes, rau, thuaText: fm.thua };
       curSvg = buildDiagramSvg(curData, { showVerts: fm.showVerts, decimals: fm.decimals });
       $('#tlPrev').innerHTML = curSvg;
