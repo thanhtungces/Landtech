@@ -287,13 +287,15 @@
     } else {
       html += tbl('Điểm', [toVN(Ly, f.pts[0])], false);
     }
-    html += '<div class="btnrow"><button id="cvZoom">Xem trên bản đồ</button><button id="cvCsv">Lưu CSV</button><button class="primary" id="cvDxf">Xuất CAD (DXF) cắm mốc</button><button id="cvCopy">Sao chép</button></div>';
+    html += '<div class="btnrow"><button id="cvZoom">Xem trên bản đồ</button><button id="cvCsv">Lưu CSV</button><button class="primary" id="cvDxf">Xuất CAD (DXF) cắm mốc</button>' + (f.kind === 'polygon' && global.TrichLuc ? '<button id="cvTl">📄 Trích lục</button>' : '') + '<button id="cvCopy">Sao chép</button></div>';
     box.innerHTML = html;
     C.openSheet('Bảng tọa độ', box);
     const name = safeName(Ly.name) + '_thua' + (lb.thua !== '' && lb.thua != null ? safeName(lb.thua) : fi + 1);
     box.querySelector('#cvZoom').onclick = () => { C.closeSheet(); C.select(Ly, [fi], true); };
     box.querySelector('#cvCsv').onclick = () => doSave(name + '.csv', coordCsv(Ly, [fi]), 'text/csv');
     box.querySelector('#cvDxf').onclick = () => doSave(name + '.dxf', buildDxf(Ly, [fi]).text, 'application/dxf');
+    const bTl = box.querySelector('#cvTl');
+    if (bTl) bTl.onclick = () => global.TrichLuc.open(Ly, fi);
     box.querySelector('#cvCopy').onclick = () => {
       const txt = coordCsv(Ly, [fi]).replace(/^﻿/, '').replace(/,/g, '\t');
       try { navigator.clipboard.writeText(txt).then(() => C.toast('Đã sao chép bảng tọa độ'), () => C.toast('Không sao chép được', true)); } catch (e) { C.toast('Không sao chép được', true); }
@@ -589,5 +591,5 @@
     } catch (e) { C.loading(false); C.toast('Lỗi xuất: ' + e.message, true); }
   }
 
-  global.Attr = { fields: (Ly) => { prepareForSearch(Ly); return fieldsOf(Ly); }, guess: (Ly) => { prepareForSearch(Ly); return guessFields(Ly); }, labelPoint, init, showSearch, showInventory, showTable, showCoords, buildDxf, coordCsv, vnRings, areaOf, ringPer, safeName, stamp, doSave, joinCadLabels, recordsOf };
+  global.Attr = { fields: (Ly) => { prepareForSearch(Ly); return fieldsOf(Ly); }, guess: (Ly) => { prepareForSearch(Ly); return guessFields(Ly); }, labelPoint, init, showSearch, showInventory, showTable, showCoords, buildDxf, coordCsv, vnRings, toVN, vnLon0, featLabel, prepareForSearch, areaOf, ringPer, safeName, stamp, doSave, joinCadLabels, recordsOf };
 })(window);

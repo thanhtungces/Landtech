@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
-  const APP = { name: 'Tung_LandTech', author: 'Nguyễn Thanh Tùng', unit: 'Đội đo đạc – Văn phòng đăng ký đất đai thành phố Đồng Nai', phone: '0356198189', version: '2.20' };
+  const APP = { name: 'Tung_LandTech', author: 'Nguyễn Thanh Tùng', unit: 'Đội đo đạc – Văn phòng đăng ký đất đai thành phố Đồng Nai', phone: '0356198189', version: '2.21' };
 
   // ---------- Cài đặt (lưu cục bộ) ----------
   const DEF = { mode: 'auto', lon0: 107.75, swap: 'auto', usePrj: true, base: 'gsat', labels: true, textMinPx: 3, textScale: 1, dgnUor: 0, prov: 'Đồng Nai', closeLevels: '10,23,31,32', closeTol: 0.1, autoClose: true, autoSave: true, luAlpha: 0 };
@@ -331,6 +331,7 @@
 
   Attr.init({ layers: () => layers, S, map, openSheet, closeSheet, toast, esc, fmt, loading, select, markColors: MARK_COLORS, markLabelOf });
   FindNav.init({ layers: () => layers, S, map, openSheet, closeSheet, toast, esc, fmt, select });
+  if (window.TrichLuc) TrichLuc.init({ S, openSheet, closeSheet, toast, esc, fmt, loading });
 
   // Giữ tay (hoặc chuột phải) lên bản đồ: dẫn đường tới điểm đó
   map.on('contextmenu', (ev) => {
@@ -463,7 +464,7 @@
       '<label class="fc-pick" title="Chọn màu khác"><input type="color" class="fc-inp" value="' + esc(curCol || '#22c55e') + '"><span>🎨</span></label>' +
       '<button class="fc-clr' + (curCol ? '' : ' hidden') + '" title="Bỏ màu (về mặc định)">↺ Bỏ</button></div></div>' +
       '<div class="fi-note"><input type="text" class="fn-inp" placeholder="Ghi chú kiểm kê (vd: đã ký giáp ranh, vắng chủ…)" value="' + esc(props.GHI_CHU_KK || '') + '"></div>' +
-      '<div class="fi-btns"><button class="pc">📍 Tọa độ</button><button class="pt">☰ Thuộc tính</button><button class="pd">⬇ CAD</button></div>' +
+      '<div class="fi-btns"><button class="pc">📍 Tọa độ</button><button class="pt">☰ Thuộc tính</button><button class="pd">⬇ CAD</button>' + (f.kind === 'polygon' && window.TrichLuc ? '<button class="ptl">📄 Trích lục</button>' : '') + '</div>' +
       (rows ? '<details class="fi-more"><summary>Tất cả thuộc tính</summary><table>' + rows + '</table></details>' : '');
     box.classList.remove('hidden');
     const syncColorUI = (c) => {
@@ -483,6 +484,8 @@
     box.querySelector('.pc').onclick = () => { box.classList.add('hidden'); Attr.showCoords(Ly, i); };
     box.querySelector('.pt').onclick = () => { box.classList.add('hidden'); Attr.showTable(Ly, { only: i }); };
     box.querySelector('.pd').onclick = () => { const r = Attr.buildDxf(Ly, [i]); Attr.doSave(Attr.safeName(Ly.name) + '_' + (i + 1) + '.dxf', r.text, 'application/dxf'); };
+    const bTl = box.querySelector('.ptl');
+    if (bTl) bTl.onclick = () => { box.classList.add('hidden'); TrichLuc.open(Ly, i); };
     box.querySelector('.fi-nav').onclick = () => {
       let p = latlng;
       if (f.kind === 'polygon') { try { const c = Attr.labelPoint(f.pts.map(q => ({ E: q[0], N: q[1] }))); const ll = Ly.P([c.E, c.N]); p = L.latLng(ll[0], ll[1]); } catch (e) { } }
